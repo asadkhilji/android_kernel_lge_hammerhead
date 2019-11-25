@@ -1532,20 +1532,26 @@ SYSCALL_DEFINE4(accept4, int, fd, struct sockaddr __user *, upeer_sockaddr,
 	int err, len, newfd, fput_needed;
 	struct sockaddr_storage address;
 
-	if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK))
+	if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK)) {
+                pr_err("--- socket.c:accept4:[1]: %d %d %d", fd, flags, -EINVAL);
 		return -EINVAL;
+        }
 
 	if (SOCK_NONBLOCK != O_NONBLOCK && (flags & SOCK_NONBLOCK))
 		flags = (flags & ~SOCK_NONBLOCK) | O_NONBLOCK;
 
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
-	if (!sock)
+	if (!sock) {
+                pr_err("--- socket.c:accept4:[2]: %d %d %d", fd, flags, err);
 		goto out;
+        }
 
 	err = -ENFILE;
 	newsock = sock_alloc();
-	if (!newsock)
+	if (!newsock) {
+                pr_err("--- socket.c:accept4:[3]: %d %d %d", fd, flags, err);
 		goto out_put;
+        }
 
 	newsock->type = sock->type;
 	newsock->ops = sock->ops;
@@ -1559,28 +1565,34 @@ SYSCALL_DEFINE4(accept4, int, fd, struct sockaddr __user *, upeer_sockaddr,
 	newfd = sock_alloc_file(newsock, &newfile, flags);
 	if (unlikely(newfd < 0)) {
 		err = newfd;
+                pr_err("--- socket.c:accept4:[4]: %d %d %d", fd, flags, err);
 		sock_release(newsock);
 		goto out_put;
 	}
 
 	err = security_socket_accept(sock, newsock);
-	if (err)
+	if (err) {
+                pr_err("--- socket.c:accept4:[5]: %d %d %d", fd, flags, err);
 		goto out_fd;
+        }
 
 	err = sock->ops->accept(sock, newsock, sock->file->f_flags);
-	if (err < 0)
+	if (err < 0) {
+                pr_err("--- socket.c:accept4:[6]: %d %d %d", fd, flags, err);
 		goto out_fd;
+        }
 
 	if (upeer_sockaddr) {
-		if (newsock->ops->getname(newsock, (struct sockaddr *)&address,
-					  &len, 2) < 0) {
+		if (newsock->ops->getname(newsock, (struct sockaddr *)&address, &len, 2) < 0) {
 			err = -ECONNABORTED;
+                        pr_err("--- socket.c:accept4:[7]: %d %d %d", fd, flags, err);
 			goto out_fd;
 		}
-		err = move_addr_to_user(&address,
-					len, upeer_sockaddr, upeer_addrlen);
-		if (err < 0)
+		err = move_addr_to_user(&address, len, upeer_sockaddr, upeer_addrlen);
+		if (err < 0) {
+                        pr_err("--- socket.c:accept4:[8]: %d %d %d", fd, flags, err);
 			goto out_fd;
+                }
 	}
 
 	/* File flags are not inherited via accept() unlike another OSes. */
@@ -1592,6 +1604,9 @@ SYSCALL_DEFINE4(accept4, int, fd, struct sockaddr __user *, upeer_sockaddr,
 out_put:
 	fput_light(sock->file, fput_needed);
 out:
+        if (err < 0) {
+            pr_err("--- socket.c:accept4:[x]: %d %d %d", fd, flags, err);
+        }
 	return err;
 out_fd:
 	fput(newfile);
